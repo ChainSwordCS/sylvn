@@ -1,10 +1,20 @@
+# python 3.12+
+
 import subprocess
 import os
 import csv
+import argparse
 
-svnCmd = "svn"
-walkStart = "turtle_project"
-outputFile = "dumps.csv"
+argparser = argparse.ArgumentParser()
+argparser.add_argument("-i", "--inputdir", help="the svn directory to parse. (the directory containing the \".svn\" folder", required=True)
+argparser.add_argument("-o", "--output", help="the name for the output csv file. default is \"dumps.csv\"", default="dumps.csv")
+argparser.add_argument("--svn", help="svn path variable, or filepath to svn executable. default is \"svn\"", default="svn")
+
+args = argparser.parse_args()
+
+svnCmd = args.svn
+walkStart = args.inputdir
+outputFile = args.output
 
 try:
 	os.remove(outputFile)
@@ -17,45 +27,32 @@ with open(outputFile, 'w', newline='', encoding='utf-8') as csvfile:
 	# Write column headers
 	outputWriter.writerow(["path","isDirectory","lastChangedAuthor","lastChangedRev","lastChangedDate","textLastUpdated","checksum"])
 	
-	for rootdir, dirnames, filenames in os.walk(walkStart):
-		# Skip over .svn directory
-		if ".svn" in dirnames:
-			del dirnames[dirnames.index(".svn")]
+	def parsefile(rootdir, fn, isdir):
+		path = ""
+		lca = ""
+		lcr = ""
+		lcd = ""
+		tlu = ""
+		chk = ""
 		
-		for dirn in dirnames:
-			absolute = os.path.join(rootdir, dirn)
-			print("Dumping "+absolute)
-			result = subprocess.run(["svn", "info", absolute], capture_output=True)
-			lines = result.stdout.decode("UTF-8").split("\r\n")
-			path = ""
-			lca = ""
-			lcr = ""
-			lcd = ""
-			chk = ""
-			for line in lines:
-				if line.startswith("Path: "):
-					path = line[6:]
-				if line.startswith("Last Changed Author: "):
-					lca = line[21:]
-				if line.startswith("Last Changed Rev: "):
-					lcr = line[18:]
-				if line.startswith("Last Changed Date: "):
-					lcd = line[19:]
-				if line.startswith("Checksum: "):
-					chk = line[10:]
-			outputWriter.writerow([absolute, True, lca, lcr, lcd, "", chk])
+		# absolute is a str
+		absolute = os.path.join(rootdir, fn)
+		print("Dumping "+absolute)
+		# "universal_newlines=True" = "text=True" in the args passed to subprocess.run()
+		result = subprocess.run(["svn", "info", absolute], shell=True, text=True, capture_output=True)
 		
-		for fn in filenames:
-			absolute = os.path.join(rootdir, fn)
-			print("Dumping "+absolute)
-			result = subprocess.run(["svn", "info", absolute], capture_output=True)
-			lines = result.stdout.decode("UTF-8").split("\r\n")
-			path = ""
-			lca = ""
-			lcr = ""
-			lcd = ""
-			tlu = ""
-			chk = ""
+		if(result.stdout is not None):
+			stdout = ""
+			
+			# commented-out because it slows down execution
+			# and is only necessary if you change to "text=False" in the above call to subprocess.run()
+			#if(type(result.stdout) is bytes):
+			#	stdout = result.stdout.decode("UTF-8") # possible encoding issues?
+			#else: # type(result.stdout) is str
+			stdout = result.stdout
+			
+			#print(result.stdout) # debug
+			lines = result.stdout.split("\n") # "\r\n"
 			for line in lines:
 				if line.startswith("Path: "):
 					path = line[6:]
@@ -69,4 +66,18 @@ with open(outputFile, 'w', newline='', encoding='utf-8') as csvfile:
 					tlu = line[19:]
 				if line.startswith("Checksum: "):
 					chk = line[10:]
-			outputWriter.writerow([absolute, True, lca, lcr, lcd, tlu, chk])
+		outputWriter.writerow([absolute, isdir, lca, lcr, lcd, tlu, chk])
+	
+	
+	for rootdir, dirnames, filenames in os.walk(walkStart):
+		# Skip over .svn directory
+		if ".svn" in dirnames:
+			del dirnames[dirnames.index(".svn")]
+		
+		parsefile(rootdir, "", True)
+		
+		for dirn in dirnames:
+			parsefile(rootdir, dirn, True)
+		
+		for fn in filenames:
+			parsefile(rootdir, fn, False)
