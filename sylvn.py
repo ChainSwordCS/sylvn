@@ -38,6 +38,13 @@ with open(outputFile, 'w', newline='', encoding='utf-8') as csvfile:
 		# absolute is a str
 		absolute = os.path.join(rootdir, fn)
 		print("Dumping "+absolute)
+		
+		# KNOWN ISSUE: If the target filename (or path to it) contains Japanese text characters,
+		# And the user is on Windows (10) using an English locale,
+		# The call to subprocess.run() will just fail :P
+		#
+		# Workaround: Set your system locale to Japanese
+		
 		# "universal_newlines=True" = "text=True" in the args passed to subprocess.run()
 		result = subprocess.run(["svn", "info", absolute], shell=True, text=True, capture_output=True)
 		
